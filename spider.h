@@ -1,1 +1,133 @@
-#pragma once#ifndef __H_SPIDER_H__#define __H_SPIDER_H__#include <string>#include <unordered_map>#include "http_request.h"#include "https_request.h"class spider{public:	spider() {}	virtual ~spider() {}	virtual std::size_t get_content(std::string url) = 0;};class http_spider : public spider{public:	http_spider() {}	virtual ~http_spider() {}	// »ñÈ¡ÄÚÈİ	std::size_t get_content(std::string url) override	{		// ´ıÅÀµÄÍøÕ¾ÁĞ±í		std::unordered_map<std::string, std::string> map_net_;		map_net_[url] = url;		// ·ÖÎö³öµÄ½á¹û		std::unordered_map<std::string, std::string> map_analy_;		wcont::http_request http_request_;		// ÉèÖÃ»ù×¼Ò³Ãæ		http_request_.set_base_link(url);		// ¿ªÊ¼»ñÈ¡Ò³ÃæÄÚÈİ		while (true)		{			// ·ÖÎöĞèÒªÅÀµÄÍøÕ¾			for (const auto & it : map_net_)			{				http_request_.get_content(it.first, map_net_, map_analy_);			}			// ·ÖÎöÍê±ÏÖØÖÃ½á¹û			// ×¼±¸ÏÂÒ»ÂÖÑ­»·			if (map_analy_.size())			{				// ÉèÖÃÏÂÒ»ÂÖÒª·ÖÎöµÄÄÚÈİ				map_net_ = map_analy_;				// Çå³ıÖ®Ç°·ÖÎöÒ³ÃæµÃ³öµÄĞÂÒ³Ãæ				map_analy_.clear();			}			else			{				std::cout << "No content to catch..." << std::endl;				break;			}		}		return valid_ret_val;	}};class https_spider : public spider{public:	https_spider() {}	virtual ~https_spider() {}	// »ñÈ¡ÄÚÈİ	std::size_t get_content(std::string url) override	{		// ³õÊ¼ÍøÖ·		std::size_t end_pos_ = std::string::npos != url.find(".com") ? url.find(".com") + strlen(".com") : 0;		std::string base_url_ = std::string(url.begin(), url.begin() + end_pos_);		std::multimap<std::size_t, wcont::net_message> map_net_;		map_net_.insert(std::make_pair<std::size_t, wcont::net_message>(1, wcont::net_message(base_url_, url, 0)));		// ·ÖÎö³öµÄ½á¹û		std::multimap<std::size_t, wcont::net_message> map_analy_;		try {			// ¿ªÊ¼»ñÈ¡Ò³ÃæÄÚÈİ			while (true)			{						// ·ÖÎöĞèÒªÅÀµÄÍøÕ¾				for (const auto & it : map_net_)				{					try					{						wcont::https_request https_request_(it.second, map_analy_);						// ÊÇ·ñ×èÈûÎª¼Ñ£¿ÖµµÃÉÌÈ¶						while (!https_request_.stoped());					}					catch (...)					{						// ²¶»ñÒì³£						std::cout << "Exception£ºGet content failed!" << std::endl;					}				}				// ·ÖÎöÍê±ÏÖØÖÃ½á¹û				// ×¼±¸ÏÂÒ»ÂÖÑ­»·				if (map_analy_.size())				{					// ÉèÖÃÏÂÒ»ÂÖÒª·ÖÎöµÄÄÚÈİ					map_net_ = map_analy_;					// Çå³ıÖ®Ç°·ÖÎöÒ³ÃæµÃ³öµÄĞÂÒ³Ãæ					map_analy_.clear();				}				else				{					std::cout << "No content to catch..." << std::endl;					break;				}			}		}		catch (std::exception& e) 		{			std::cerr << "Exception: " << e.what() << "\n";		}		return valid_ret_val;	}};#endif // !__H_SPIDER_H__
+#pragma once
+
+#ifndef __H_SPIDER_H__
+#define __H_SPIDER_H__
+
+#include <string>
+#include <unordered_map>
+
+#include "http_request.h"
+#include "https_request.h"
+
+class spider
+{
+public:
+	spider() {}
+	virtual ~spider() {}
+
+	virtual std::size_t get_content(std::string url) = 0;
+};
+
+class http_spider : public spider
+{
+public:
+	http_spider() {}
+	virtual ~http_spider() {}
+
+	// è·å–å†…å®¹
+	std::size_t get_content(std::string url) override
+	{
+		// å¾…çˆ¬çš„ç½‘ç«™åˆ—è¡¨
+		std::unordered_map<std::string, std::string> map_net_;
+		map_net_[url] = url;
+
+		// åˆ†æå‡ºçš„ç»“æœ
+		std::unordered_map<std::string, std::string> map_analy_;
+
+		wcont::http_request http_request_;
+		// è®¾ç½®åŸºå‡†é¡µé¢
+		http_request_.set_base_link(url);
+
+		// å¼€å§‹è·å–é¡µé¢å†…å®¹
+		while (true)
+		{
+			// åˆ†æéœ€è¦çˆ¬çš„ç½‘ç«™
+			for (const auto & it : map_net_)
+			{
+				http_request_.get_content(it.first, map_net_, map_analy_);
+			}
+
+			// åˆ†æå®Œæ¯•é‡ç½®ç»“æœ
+			// å‡†å¤‡ä¸‹ä¸€è½®å¾ªç¯
+			if (map_analy_.size())
+			{
+				// è®¾ç½®ä¸‹ä¸€è½®è¦åˆ†æçš„å†…å®¹
+				map_net_ = map_analy_;
+				// æ¸…é™¤ä¹‹å‰åˆ†æé¡µé¢å¾—å‡ºçš„æ–°é¡µé¢
+				map_analy_.clear();
+			}
+			else
+			{
+				std::cout << "No content to catch..." << std::endl;
+				break;
+			}
+		}
+
+		return valid_ret_val;
+	}
+};
+
+class https_spider : public spider
+{
+public:
+	https_spider() {}
+	virtual ~https_spider() {}
+
+	// è·å–å†…å®¹
+	std::size_t get_content(std::string url) override
+	{
+		// åˆå§‹ç½‘å€
+		std::size_t end_pos_ = std::string::npos != url.find(".com") ? url.find(".com") + strlen(".com") : 0;
+		std::string base_url_ = std::string(url.begin(), url.begin() + end_pos_);
+		std::multimap<std::size_t, wcont::net_message> map_net_;
+		map_net_.insert(std::make_pair<std::size_t, wcont::net_message>(1, wcont::net_message(base_url_, url, 0)));
+
+		// åˆ†æå‡ºçš„ç»“æœ
+		std::multimap<std::size_t, wcont::net_message> map_analy_;
+
+		try {
+			// å¼€å§‹è·å–é¡µé¢å†…å®¹
+			while (true)
+			{		
+				// åˆ†æéœ€è¦çˆ¬çš„ç½‘ç«™
+				for (const auto & it : map_net_)
+				{
+					try
+					{
+						wcont::https_request https_request_(it.second, map_analy_);
+						// æ˜¯å¦é˜»å¡ä¸ºä½³ï¼Ÿå€¼å¾—å•†æ¦·
+						while (!https_request_.stoped());
+					}
+					catch (...)
+					{
+						// æ•è·å¼‚å¸¸
+						std::cout << "Exceptionï¼šGet content failed!" << std::endl;
+					}
+				}
+
+				// åˆ†æå®Œæ¯•é‡ç½®ç»“æœ
+				// å‡†å¤‡ä¸‹ä¸€è½®å¾ªç¯
+				if (map_analy_.size())
+				{
+					// è®¾ç½®ä¸‹ä¸€è½®è¦åˆ†æçš„å†…å®¹
+					map_net_ = map_analy_;
+					// æ¸…é™¤ä¹‹å‰åˆ†æé¡µé¢å¾—å‡ºçš„æ–°é¡µé¢
+					map_analy_.clear();
+				}
+				else
+				{
+					std::cout << "No content to catch..." << std::endl;
+					break;
+				}
+			} 
+		}
+		catch (std::exception& e) 
+		{
+			std::cerr << "Exception: " << e.what() << "\n";
+		}
+
+		return valid_ret_val;
+	}
+};
+
+#endif // !__H_SPIDER_H__
