@@ -1,1 +1,13 @@
-#pragma once// ·µ»ØÖµ±ê¼Çenum{	invalid_ret_val = 1,	valid_ret_val = 0,	// httpÇëÇóÕıÈ·´úÂë	valid_http_ret_val = 200,	// ×î´óÏÂÔØÎÄ¼ş´óĞ¡	max_content_size = 1024 * 1024 * 4,};
+#pragma once
+
+// è¿”å›å€¼æ ‡è®°
+enum
+{
+	invalid_ret_val = 1,
+	valid_ret_val = 0,
+	// httpè¯·æ±‚æ­£ç¡®ä»£ç 
+	valid_http_ret_val = 200,
+	// æœ€å¤§ä¸‹è½½æ–‡ä»¶å¤§å°
+	max_content_size = 1024 * 1024 * 4,
+};
+ 
