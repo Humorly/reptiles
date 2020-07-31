@@ -6,6 +6,7 @@
 #include <istream>
 #include <ostream>
 #include <string>
+#include <filesystem>
 
 #include "const_value.h"
 
@@ -14,7 +15,7 @@ namespace wcont
 	using boost::asio::deadline_timer;
 
 
-	// Ò³ÃæĞÅÏ¢
+	// é¡µé¢ä¿¡æ¯
 	class net_message
 	{
 	public:
@@ -24,7 +25,7 @@ namespace wcont
 		};
 		net_message() : str_base_net_(""), str_net_(""), type_(0) {}
 
-		// ²¶»ñµ½µÄÒ³ÃæĞÅÏ¢
+		// æ•è·åˆ°çš„é¡µé¢ä¿¡æ¯
 		net_message(std::string str_base_net, std::string str_net, std::size_t type) 
 			: str_base_net_(str_base_net), str_net_(str_net), type_(type) {}
 		virtual ~net_message() {}
@@ -45,25 +46,32 @@ namespace wcont
 		https_request(const net_message & msg, std::multimap<std::size_t, wcont::net_message> & ma_analy) 
 			: map_analy_(ma_analy)
 		{
-			// Í£Ö¹±ê¼Ç
+			// åœæ­¢æ ‡è®°
 			stop_ = false;
-			// ±£´æµ±Ç°Ò³ÃæÀàĞÍ
+			// ä¿å­˜å½“å‰é¡µé¢ç±»å‹
 			msg_ = msg;
-			// ÖØÖÃÒ³Ãæ
+			// é‡ç½®é¡µé¢
 			std::string str_base_ = (std::string::npos == msg_.get_net_str().find(".com"))
 				? msg_.get_base_net_str() + msg_.get_net_str() : msg_.get_net_str();
 
-			// ÅĞ¶¨ÊÇhttp»¹ÊÇhttps
-
+			// åˆ¤å®šæ˜¯httpè¿˜æ˜¯https
 			if (std::string::npos != str_base_.find(".com"))
 			{
 				std::size_t start_pos_ = std::string::npos != str_base_.find("http://") ? str_base_.find("http://") + strlen("http://")
 					: std::string::npos != str_base_.find("https://") ? str_base_.find("https://") + strlen("https://") : 0;
 				std::size_t end_pos_ = std::string::npos != str_base_.find(".com") ? str_base_.find(".com") + strlen(".com") : 0;
 
-				// »ñÈ¡ÍøÖ·
+				// é”™è¯¯é¡µé¢
+				if (start_pos_ > end_pos_)
+				{
+					// åœæ­¢æ¥æ”¶
+					stop_ = true;
+					return;
+				}
+
+				// è·å–ç½‘å€
 				url_ = std::string(str_base_.begin() + start_pos_, str_base_.begin() + end_pos_);
-				// ²Ã¼ôÂ·¾¶
+				// è£å‰ªè·¯å¾„
 				path_ = std::string(str_base_.begin() + end_pos_, str_base_.end());
 
 				boost::asio::ip::tcp::resolver resolver_(io_service_);
@@ -71,12 +79,18 @@ namespace wcont
 				boost::asio::ip::tcp::resolver::iterator resolver_iter_ = resolver_.resolve(query_);
 
 				context_.reset(new boost::asio::ssl::context(boost::asio::ssl::context::sslv23));
-				// ÖØÖÃsocket
+				// ä¸ä½¿ç”¨è¯ä¹¦
+				//context_->load_verify_file("ca.pem");
+
+				// é‡ç½®socket
 				socket_.reset(new boost::asio::ssl::stream<boost::asio::ip::tcp::socket>(io_service_, *context_));
-				// ÖØÖÃ³¬Ê±
+				// é‡ç½®è¶…æ—¶
 				deadline_.reset(new deadline_timer(io_service_));
 
+				// ä¸ä½¿ç”¨è¯ä¹¦
+				//socket_->set_verify_mode(boost::asio::ssl::context::verify_peer);
 				socket_->set_verify_mode(boost::asio::ssl::context::verify_none);
+
 				socket_->set_verify_callback(&verify_certificate);
 
 				boost::asio::async_connect(socket_->lowest_layer(), resolver_iter_,
@@ -84,10 +98,10 @@ namespace wcont
 					handle_connect(url_, path_, ec);
 				});
 
-				// °ó¶¨³¬Ê±
+				// ç»‘å®šè¶…æ—¶
 				deadline_->async_wait(boost::bind(&https_request::check_deadline, this));
 
-				// Æô¶¯
+				// å¯åŠ¨
 				io_service_.run();
 			}
 		}
@@ -101,6 +115,9 @@ namespace wcont
 			}
 			else {
 				std::cout << "Connect failed: " << error.message() << std::endl;
+
+				// å…³é—­è¿æ¥
+				close();
 			}
 		}
 
@@ -112,6 +129,7 @@ namespace wcont
 
 				request_ << "GET " << path << " HTTP/1.1\r\n";
 				request_ << "Host:" << url << "\r\n";
+				request_ << "User-Agent:Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.6) Gecko/20091201 Firefox/3.5.6";
 				request_ << "Accept: */*\r\n";
 				request_ << "\r\n";
 
@@ -122,7 +140,7 @@ namespace wcont
 			else 
 			{
 				std::cout << "Handshake failed: " << error.message() << std::endl;
-				// ¹Ø±ÕÍË³ö
+				// å…³é—­é€€å‡º
 				close();
 			}
 		}
@@ -134,17 +152,20 @@ namespace wcont
 				//std::cout << "Sending request OK!" << std::endl;
 				boost::asio::async_read_until(*socket_, reply_, "\r\n",
 					[this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
-						// ½âÎö×´Ì¬
+						// è§£æçŠ¶æ€
 						read_status_code(ec);
 				});
 			}
 			else 
 			{
 				std::cout << "Write failed: " << error.message() << std::endl;
+
+				// å…³é—­è¿æ¥
+				close();
 			}
 		}
 
-		// ½âÎö·µ»Ø×´Ì¬
+		// è§£æè¿”å›çŠ¶æ€
 		void read_status_code(const boost::system::error_code& err)
 		{
 			//std::cerr << "read status..."  "\n";
@@ -160,7 +181,7 @@ namespace wcont
 				{
 					std::cerr << "Invalid response\n";
 
-					// ¹Ø±Õ¶ÁÈ¡
+					// å…³é—­è¯»å–
 					close();
 
 					return;
@@ -170,7 +191,7 @@ namespace wcont
 					std::cerr << "Response returned with status code ";
 					std::cerr << status_code_ << "\n";
 
-					// ¹Ø±Õ¶ÁÈ¡
+					// å…³é—­è¯»å–
 					close();
 
 					return;
@@ -184,10 +205,13 @@ namespace wcont
 			else
 			{
 				std::cerr << "Error: " << err << "\n";
+
+				// å…³é—­è¯»å–
+				close();
 			}
 		}
 
-		// ¶ÁÈ¡Ò³ÃæÍ·²¿
+		// è¯»å–é¡µé¢å¤´éƒ¨
 		void read_headers(const boost::system::error_code& err)
 		{
 			//std::cerr << "read headers..."  "\n";
@@ -209,12 +233,15 @@ namespace wcont
 			else
 			{
 				std::cerr << "Error: " << err << "\n";
+
+				// å…³é—­è¯»å–
+				close();
 			}
 		}
 
 		void read_content(const boost::system::error_code& err)
 		{
-			// ÉèÖÃ¶ÁÈ¡³¬Ê±
+			// è®¾ç½®è¯»å–è¶…æ—¶
 			deadline_->expires_from_now(boost::posix_time::millisec(100));
 
 			//std::cerr << "read_content..."  "\n";
@@ -235,12 +262,12 @@ namespace wcont
 			}
 		}
 
-		// ¼ì²é³¬Ê±
+		// æ£€æŸ¥è¶…æ—¶
 		void check_deadline()
 		{
 			if (deadline_->expires_at() <= deadline_timer::traits_type::now())
 			{
-				// ´æ´¢ÄÚÈİ
+				// å­˜å‚¨å†…å®¹
 				save_content();
 				deadline_->expires_at(boost::posix_time::pos_infin);
 			}
@@ -248,37 +275,38 @@ namespace wcont
 			deadline_->async_wait(boost::bind(&https_request::check_deadline, this));
 		}
 
-		// ±£´æÄÚÈİ
+		// ä¿å­˜å†…å®¹
 		void save_content()
 		{
-			// Êä³ö×îÖÕÄÚÈİ
+			// è¾“å‡ºæœ€ç»ˆå†…å®¹
 			message_body_ << &reply_;
 			//std::cout << message_body_.str();
 
 			if (msg_.get_type())
 			{
 
-				// ²Ã¼ôÎÄ¼şÃû³Æ
+				// è£å‰ªæ–‡ä»¶åç§°
 				auto npos_ = path_.rfind('/');
 				std::string str_file_;
 
 				if (std::string::npos != npos_)
 				{
-					// ¿½±´ÎÄ¼şÃû³Æ
-					str_file_ = std::move(std::string(path_.begin() + npos_ + 1, path_.end()));
+					// æ‹·è´æ–‡ä»¶åç§°
+					str_file_ = std::move(std::string("res/") + std::string(path_.begin() + npos_ + 1, path_.end()));
+					std::filesystem::create_directory(std::string("res"));
 				}
 
-				// Ğ´ÈëÎÄ¼ş
+				// å†™å…¥æ–‡ä»¶
 				try
 				{
-					std::cout << "ÕıÔÚ±£´æÎÄ¼ş:" << str_file_ << std::endl;
+					std::cout << "æ­£åœ¨ä¿å­˜æ–‡ä»¶:" << str_file_ << std::endl;
 
 					std::ofstream file_(str_file_, std::ios::out | std::ios_base::binary | std::ios::trunc);
 					if (file_.is_open())
 					{
-						// Ğ´ÈëÄÚÈİ
+						// å†™å…¥å†…å®¹
 						file_ << message_body_.str();
-						// ¹Ø±ÕÎÄ¼ş
+						// å…³é—­æ–‡ä»¶
 						file_.close();
 					}
 					else
@@ -293,72 +321,71 @@ namespace wcont
 			}
 			else
 			{
-				// ËÑË÷ÍøÖ·
+				// æœç´¢ç½‘å€
 				std::string net_content_ = message_body_.str();
 				boost::regex net_regex_("href=\"([//]{0,})([^\"]*?)\"");
 				boost::smatch net_smatch_;
-				// ËÑË÷Æ¥ÅäÄÚÈİ
+				// æœç´¢åŒ¹é…å†…å®¹
 				while (boost::regex_search(net_content_, net_smatch_, net_regex_))
 				{
-					// ²¶»ñÍøÖ·ÓëÃû³Æ
+					// æ•è·ç½‘å€ä¸åç§°
 					if (!net_smatch_.empty())
 					{
-						// »ñÈ¡ÍøÖ·
+						// è·å–ç½‘å€
 						std::string str_net_ = net_smatch_[2].str();
 
-						// Ìí¼Óµ½ÁĞ±íÖ®ÖĞ
-						// ¹©ÏÂ´ÎËÑË÷Ö®ÓÃ						
+						// æ·»åŠ åˆ°åˆ—è¡¨ä¹‹ä¸­
+						// ä¾›ä¸‹æ¬¡æœç´¢ä¹‹ç”¨						
 						map_analy_.insert(std::make_pair<std::size_t, wcont::net_message>(1, net_message(msg_.get_base_net_str(), str_net_, 0)));
 					}
 
-					// ¼ÌĞøËÑË÷
+					// ç»§ç»­æœç´¢
 					net_content_ = net_smatch_.suffix();
 				}
 
-				// ËÑË÷ÎÄ¼ş
+				// æœç´¢æ–‡ä»¶
 				std::string src_content_ = message_body_.str();
 				boost::regex src_regex_("src=\"([//]{0,})([^\"]*?)\"");
 				boost::smatch src_smatch_;
-				// ËÑË÷Æ¥ÅäÄÚÈİ
+				// æœç´¢åŒ¹é…å†…å®¹
 				while (boost::regex_search(src_content_, src_smatch_, src_regex_))
 				{
-					// ²¶»ñÂ·¾¶
+					// æ•è·è·¯å¾„
 					if (!src_smatch_.empty())
 					{
-						// »ñÈ¡ÎÄ¼şÂ·¾¶
+						// è·å–æ–‡ä»¶è·¯å¾„
 						std::string str_src_ = src_smatch_[2].str();
-						// Ìí¼Óµ½ÁĞ±íÖ®ÖĞ
-						// ¹©ÏÂ´ÎËÑË÷Ö®ÓÃ						
+						// æ·»åŠ åˆ°åˆ—è¡¨ä¹‹ä¸­
+						// ä¾›ä¸‹æ¬¡æœç´¢ä¹‹ç”¨						
 						map_analy_.insert(std::make_pair<std::size_t, wcont::net_message>(0, net_message(msg_.get_base_net_str(), str_src_, 1)));
-
 					}
-					// ¼ÌĞøËÑË÷
+					// ç»§ç»­æœç´¢
 					src_content_ = src_smatch_.suffix();
 				}
 			}
 
-			// ¹Ø±Õ¶ÁÈ¡
+			// å…³é—­è¯»å–
 			close();
 		}
 
-		// ¹Ø±Õ¶ÁÈ¡
+		// å…³é—­è¯»å–
 		void close()
 		{
 			try
 			{
-				// Í£Ö¹·¢ËÍ
+				// åœæ­¢å‘é€
 				io_service_.stop();
 				socket_->shutdown();
 			}
 			catch (const std::exception&)
 			{
-				// ²»×ö´¦Àí
+				// ä¸åšå¤„ç†
 			}
-			// Í£Ö¹½ÓÊÕ
+			// åœæ­¢æ¥æ”¶
 			stop_ = true;
 		}
 
-		// Ö¤ÊéĞ£Ñé --> ²¢Ã»ÓĞ·¢ËÍÈÎºÎÊµÖÊÖ¤Êé
+		// è¯ä¹¦æ ¡éªŒ --> å¹¶æ²¡æœ‰å‘é€ä»»ä½•å®è´¨è¯ä¹¦
 		static bool verify_certificate(bool preverified, boost::asio::ssl::verify_context& ctx)
 		{
 			//std::cerr << "verify_certificate "  "\n";
@@ -371,38 +398,38 @@ namespace wcont
 			return preverified;
 		}
 
-		// µ±Ç°Íê³É×´Ì¬
+		// å½“å‰å®ŒæˆçŠ¶æ€
 		bool stoped() { return stop_.load(); }
 
 	private:
 		boost::asio::io_service io_service_;
 		std::shared_ptr<boost::asio::ssl::context> context_;
-		// Í·²¿ĞÅÏ¢
+		// å¤´éƒ¨ä¿¡æ¯
 		std::ostringstream message_header_;
-		// ÄÚÈİ
+		// å†…å®¹
 		std::ostringstream message_body_;
 
-		// ·µ»ØÂë
+		// è¿”å›ç 
 		std::size_t status_code_;
-		// Êı¾İÁ÷
+		// æ•°æ®æµ
 		std::shared_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> socket_;
 		boost::asio::streambuf reply_;
 
-		// ³¬Ê±´¦Àí
+		// è¶…æ—¶å¤„ç†
 		std::shared_ptr<deadline_timer> deadline_;
 
-		// ·ÃÎÊÒ³Ãæ
+		// è®¿é—®é¡µé¢
 		std::string url_;
-		// ·ÃÎÊÂ·¾¶
+		// è®¿é—®è·¯å¾„
 		std::string path_;
 
-		// µ±Ç°½âÎöÒ³ÃæÀàĞÍ
+		// å½“å‰è§£æé¡µé¢ç±»å‹
 		net_message msg_;
 
-		// Í£Ö¹±ê¼Ç
+		// åœæ­¢æ ‡è®°
 		std::atomic_bool stop_;
 
-		// ·ÖÎö³öµÄ½á¹û
+		// åˆ†æå‡ºçš„ç»“æœ
 		std::multimap<std::size_t, wcont::net_message> & map_analy_;
 	};
 }
