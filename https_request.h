@@ -1,7 +1,7 @@
 
-#include <boost/asio.hpp>
-#include <boost/asio/ssl.hpp>
-#include <boost/bind.hpp>
+#include <asio.hpp>
+#include <asio/ssl.hpp>
+
 #include <iostream>
 #include <istream>
 #include <ostream>
@@ -12,8 +12,7 @@
 
 namespace wcont
 {
-	using boost::asio::deadline_timer;
-
+	using asio::high_resolution_timer;
 
 	// 页面信息
 	class net_message
@@ -74,44 +73,46 @@ namespace wcont
 				// 裁剪路径
 				path_ = std::string(str_base_.begin() + end_pos_, str_base_.end());
 
-				boost::asio::ip::tcp::resolver resolver_(io_service_);
-				boost::asio::ip::tcp::resolver::query query_(url_, "443");
-				boost::asio::ip::tcp::resolver::iterator resolver_iter_ = resolver_.resolve(query_);
+				asio::ip::tcp::resolver resolver_(io_service_);
+				asio::ip::tcp::resolver::query query_(url_, "443");
+				asio::ip::tcp::resolver::iterator resolver_iter_ = resolver_.resolve(query_);
 
-				context_.reset(new boost::asio::ssl::context(boost::asio::ssl::context::sslv23));
+				context_.reset(new asio::ssl::context(asio::ssl::context::sslv23));
 				// 不使用证书
 				//context_->load_verify_file("ca.pem");
 
 				// 重置socket
-				socket_.reset(new boost::asio::ssl::stream<boost::asio::ip::tcp::socket>(io_service_, *context_));
+				socket_.reset(new asio::ssl::stream<asio::ip::tcp::socket>(io_service_, *context_));
 				// 重置超时
-				deadline_.reset(new deadline_timer(io_service_));
+				timer_.reset(new asio::high_resolution_timer(io_service_));
 
 				// 不使用证书
-				//socket_->set_verify_mode(boost::asio::ssl::context::verify_peer);
-				socket_->set_verify_mode(boost::asio::ssl::context::verify_none);
-
+				//socket_->set_verify_mode(asio::ssl::context::verify_peer);
+				socket_->set_verify_mode(asio::ssl::context::verify_none);
 				socket_->set_verify_callback(&verify_certificate);
 
-				boost::asio::async_connect(socket_->lowest_layer(), resolver_iter_,
-					[this](const boost::system::error_code& ec, boost::asio::ip::tcp::resolver::iterator endpoint_iterator) {
+				asio::async_connect(socket_->lowest_layer(), resolver_iter_,
+					[this](const std::error_code& ec, asio::ip::tcp::resolver::iterator endpoint_iterator) {
 					handle_connect(url_, path_, ec);
 				});
 
-				// 绑定超时
-				deadline_->async_wait(boost::bind(&https_request::check_deadline, this));
+				begin_ = std::chrono::high_resolution_clock::now();
+
+				// 绑定超时	
+				timer_->expires_from_now(std::chrono::seconds(10));
+				timer_->async_wait(std::bind(&https_request::check_deadline, this));
 
 				// 启动
 				io_service_.run();
 			}
 		}
 
-		void handle_connect(const std::string & url, const std::string & path, const boost::system::error_code& error)
+		void handle_connect(const std::string & url, const std::string & path, const std::error_code& error)
 		{
 			if (!error) {
-				socket_->async_handshake(boost::asio::ssl::stream_base::client,
-					boost::bind(&https_request::handle_handshake, this, 
-						url, path, boost::asio::placeholders::error));
+				socket_->async_handshake(asio::ssl::stream_base::client,
+					std::bind(&https_request::handle_handshake, this, 
+						url, path, std::placeholders::_1));
 			}
 			else {
 				std::cout << "Connect failed: " << error.message() << std::endl;
@@ -121,7 +122,7 @@ namespace wcont
 			}
 		}
 
-		void handle_handshake(const std::string & url, const std::string & path, const boost::system::error_code& error)
+		void handle_handshake(const std::string & url, const std::string & path, const std::error_code& error)
 		{
 			if (!error) 
 			{
@@ -133,9 +134,9 @@ namespace wcont
 				request_ << "Accept: */*\r\n";
 				request_ << "\r\n";
 
-				boost::asio::async_write(*socket_, boost::asio::buffer(request_.str()),
-					boost::bind(&https_request::handle_write, this, boost::asio::placeholders::error,
-						boost::asio::placeholders::bytes_transferred));
+				asio::async_write(*socket_, asio::buffer(request_.str()),
+					std::bind(&https_request::handle_write, this, std::placeholders::_1,
+						std::placeholders::_2));
 			}
 			else 
 			{
@@ -145,13 +146,13 @@ namespace wcont
 			}
 		}
 
-		void handle_write(const boost::system::error_code& error, size_t bytes_transferred)
+		void handle_write(const std::error_code& error, size_t bytes_transferred)
 		{
 			if (!error) 
 			{
 				//std::cout << "Sending request OK!" << std::endl;
-				boost::asio::async_read_until(*socket_, reply_, "\r\n",
-					[this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+				asio::async_read_until(*socket_, reply_, "\r\n",
+					[this](const std::error_code& ec, std::size_t bytes_transferred) {
 						// 解析状态
 						read_status_code(ec);
 				});
@@ -166,7 +167,7 @@ namespace wcont
 		}
 
 		// 解析返回状态
-		void read_status_code(const boost::system::error_code& err)
+		void read_status_code(const std::error_code& err)
 		{
 			//std::cerr << "read status..."  "\n";
 			if (!err)
@@ -197,8 +198,8 @@ namespace wcont
 					return;
 				}
 
-				boost::asio::async_read_until(*socket_, reply_, "\r\n\r\n",
-					[this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+				asio::async_read_until(*socket_, reply_, "\r\n\r\n",
+					[this](const std::error_code& ec, std::size_t bytes_transferred) {
 						read_headers(ec);
 				});
 			}
@@ -212,7 +213,7 @@ namespace wcont
 		}
 
 		// 读取页面头部
-		void read_headers(const boost::system::error_code& err)
+		void read_headers(const std::error_code& err)
 		{
 			//std::cerr << "read headers..."  "\n";
 			if (!err)
@@ -224,9 +225,9 @@ namespace wcont
 					message_header_ << header_ << "\n";
 				}
 
-				boost::asio::async_read(*socket_, reply_,
-					boost::asio::transfer_at_least(1),
-					[this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+				asio::async_read(*socket_, reply_,
+					asio::transfer_at_least(1),
+					[this](const std::error_code& ec, std::size_t bytes_transferred) {
 					read_content(ec);
 				});
 			}
@@ -239,24 +240,22 @@ namespace wcont
 			}
 		}
 
-		void read_content(const boost::system::error_code& err)
+		void read_content(const std::error_code& err)
 		{
-			// 设置读取超时
-			deadline_->expires_from_now(boost::posix_time::millisec(100));
-
-			//std::cerr << "read_content..."  "\n";
+			std::cerr << "read_content..."  "\n";
 			if (err)
 			{
-				message_body_ << &reply_;
+				//message_body_ << &reply_;
+				save_content();
 			}
 			else if (!err)
 			{
 				message_body_ << &reply_;
 				reply_.consume(reply_.size()); 
 
-				boost::asio::async_read(*socket_, reply_,
-					boost::asio::transfer_at_least(1),
-					[this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+				asio::async_read_until(*socket_, reply_,
+					"\r\n",
+					[this](const std::error_code& ec, std::size_t bytes_transferred) {
 					read_content(ec);
 				});
 			}
@@ -265,14 +264,13 @@ namespace wcont
 		// 检查超时
 		void check_deadline()
 		{
-			if (deadline_->expires_at() <= deadline_timer::traits_type::now())
-			{
-				// 存储内容
-				save_content();
-				deadline_->expires_at(boost::posix_time::pos_infin);
-			}
+			auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - begin_).count();
+			std::cout << elapsed << "\n";
 
-			deadline_->async_wait(boost::bind(&https_request::check_deadline, this));
+			// 存储内容
+			save_content();
+			timer_->expires_from_now(std::chrono::seconds(10));
+			timer_->async_wait(std::bind(&https_request::check_deadline, this));
 		}
 
 		// 保存内容
@@ -323,10 +321,10 @@ namespace wcont
 			{
 				// 搜索网址
 				std::string net_content_ = message_body_.str();
-				boost::regex net_regex_("href=\"([//]{0,})([^\"]*?)\"");
-				boost::smatch net_smatch_;
+				std::regex net_regex_("href=\"([//]{0,})([^\"]*?)\"");
+				std::smatch net_smatch_;
 				// 搜索匹配内容
-				while (boost::regex_search(net_content_, net_smatch_, net_regex_))
+				while (std::regex_search(net_content_, net_smatch_, net_regex_))
 				{
 					// 捕获网址与名称
 					if (!net_smatch_.empty())
@@ -345,10 +343,10 @@ namespace wcont
 
 				// 搜索文件
 				std::string src_content_ = message_body_.str();
-				boost::regex src_regex_("src=\"([//]{0,})([^\"]*?)\"");
-				boost::smatch src_smatch_;
+				std::regex src_regex_("src=\"([//]{0,})([^\"]*?)\"");
+				std::smatch src_smatch_;
 				// 搜索匹配内容
-				while (boost::regex_search(src_content_, src_smatch_, src_regex_))
+				while (std::regex_search(src_content_, src_smatch_, src_regex_))
 				{
 					// 捕获路径
 					if (!src_smatch_.empty())
@@ -386,7 +384,7 @@ namespace wcont
 		}
 
 		// 证书校验 --> 并没有发送任何实质证书
-		static bool verify_certificate(bool preverified, boost::asio::ssl::verify_context& ctx)
+		static bool verify_certificate(bool preverified, asio::ssl::verify_context& ctx)
 		{
 			//std::cerr << "verify_certificate "  "\n";
 
@@ -402,8 +400,8 @@ namespace wcont
 		bool stoped() { return stop_.load(); }
 
 	private:
-		boost::asio::io_service io_service_;
-		std::shared_ptr<boost::asio::ssl::context> context_;
+		asio::io_service io_service_;
+		std::shared_ptr<asio::ssl::context> context_;
 		// 头部信息
 		std::ostringstream message_header_;
 		// 内容
@@ -412,11 +410,11 @@ namespace wcont
 		// 返回码
 		std::size_t status_code_;
 		// 数据流
-		std::shared_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> socket_;
-		boost::asio::streambuf reply_;
+		std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> socket_;
+		asio::streambuf reply_;
 
 		// 超时处理
-		std::shared_ptr<deadline_timer> deadline_;
+		std::shared_ptr<asio::high_resolution_timer> timer_;
 
 		// 访问页面
 		std::string url_;
@@ -431,6 +429,8 @@ namespace wcont
 
 		// 分析出的结果
 		std::multimap<std::size_t, wcont::net_message> & map_analy_;
+
+		decltype(std::chrono::high_resolution_clock::now()) begin_;
 	};
 }
 
