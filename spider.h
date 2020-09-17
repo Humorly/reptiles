@@ -5,6 +5,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <map>
 
 #include "http_request.h"
 #include "https_request.h"
@@ -82,7 +83,7 @@ public:
 		std::multimap<std::size_t, wcont::net_message> map_net_;
 		map_net_.insert(std::make_pair<std::size_t, wcont::net_message>(1, wcont::net_message(base_url_, url, 0)));
 
-		// 分析出的结果
+		// 分析出的结果 
 		std::multimap<std::size_t, wcont::net_message> map_analy_;
 
 		try {
@@ -119,7 +120,7 @@ public:
 					std::cout << "No content to catch..." << std::endl;
 					break;
 				}
-			} 
+			}
 		}
 		catch (std::exception& e) 
 		{
