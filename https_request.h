@@ -96,8 +96,6 @@ namespace wcont
 					handle_connect(url_, path_, ec);
 				});
 
-				begin_ = std::chrono::high_resolution_clock::now();
-
 				// 绑定超时	
 				timer_->expires_from_now(std::chrono::seconds(10));
 				timer_->async_wait(std::bind(&https_request::check_deadline, this));
@@ -264,9 +262,6 @@ namespace wcont
 		// 检查超时
 		void check_deadline()
 		{
-			auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - begin_).count();
-			std::cout << elapsed << "\n";
-
 			// 存储内容
 			save_content();
 			timer_->expires_from_now(std::chrono::seconds(10));
@@ -400,7 +395,7 @@ namespace wcont
 		bool stoped() { return stop_.load(); }
 
 	private:
-		asio::io_service io_service_;
+		asio::io_context io_service_;
 		std::shared_ptr<asio::ssl::context> context_;
 		// 头部信息
 		std::ostringstream message_header_;
@@ -429,8 +424,6 @@ namespace wcont
 
 		// 分析出的结果
 		std::multimap<std::size_t, wcont::net_message> & map_analy_;
-
-		decltype(std::chrono::high_resolution_clock::now()) begin_;
 	};
 }
 
