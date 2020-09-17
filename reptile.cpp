@@ -1,8 +1,3 @@
-// reptile.cpp: 定义控制台应用程序的入口点。
-//
-
-#include "pch.h"
-
 #include <memory>
 #include "spider.h"
 
