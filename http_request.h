@@ -9,108 +9,109 @@
 #include <string>
 #include <fstream>
 #include <unordered_map>
+#include <filesystem>
 
-#include <boost/asio.hpp>
-// µ¼ÈëÕıÔò
-#include <boost/regex.hpp>
+#include <asio.hpp>
+#include <regex>
 
 #include "const_value.h"
 
 namespace wcont
 {
 	// post get request to server
-	using boost::asio::ip::tcp;
+	using asio::ip::tcp;
 
 	class http_request
 	{
 	public:
-		// Ã¶¾Ù·µ»ØÖµ
+		// æšä¸¾è¿”å›å€¼
 
 		http_request() {}
 		virtual ~http_request() {}
 
-		// ÉèÖÃ»ù×¼Ò³Ãæ
+		// è®¾ç½®åŸºå‡†é¡µé¢
 		void set_base_link(const std::string str_link) { str_base_link_ = std::move(str_link); }
 			
-		// »ñÈ¡Ò³ÃæÄÚÈİ
-		std::size_t get_content(const std::string & link, const std::unordered_map<std::string, std::string> & map_net, 
+		// è·å–é¡µé¢å†…å®¹
+		std::size_t get_content(const std::string & link, const std::unordered_map<std::string, std::string> & map_net,
 			std::unordered_map<std::string, std::string> & map_analy)
 		{
-			// ¶ÁÈ¡ÄÚÈİ
+			// è¯»å–å†…å®¹
 			read_content(link);
 
-			// ËÑË÷ÍøÖ·
+			// æœç´¢ç½‘å€
 			std::string net_content_ = ostream_content_.str();
-			boost::regex net_regex_("href=\"([^\"]*?)\"");
-			boost::smatch net_smatch_;
-			// ËÑË÷Æ¥ÅäÄÚÈİ
-			while (boost::regex_search(net_content_, net_smatch_, net_regex_))
+			std::regex net_regex_("href=\"([^\"]*?)\"");
+			std::smatch net_smatch_;
+			// æœç´¢åŒ¹é…å†…å®¹
+			while (std::regex_search(net_content_, net_smatch_, net_regex_))
 			{
-				// ²¶»ñÍøÖ·ÓëÃû³Æ
+				// æ•è·ç½‘å€ä¸åç§°
 				if (!net_smatch_.empty())
 				{
-					// »ñÈ¡ÍøÖ·
+					// è·å–ç½‘å€
 					std::string str_net_ = net_smatch_[1].str();
 
-					// Ìí¼Óµ½ÁĞ±íÖ®ÖĞ
-					// ¹©ÏÂ´ÎËÑË÷Ö®ÓÃ
+					// æ·»åŠ åˆ°åˆ—è¡¨ä¹‹ä¸­
+					// ä¾›ä¸‹æ¬¡æœç´¢ä¹‹ç”¨
 					if (map_net.end() == map_net.find(str_net_))
 						map_analy[str_net_] = str_net_;
 				}
 
-				// ¼ÌĞøËÑË÷
+				// ç»§ç»­æœç´¢
 				net_content_ = net_smatch_.suffix();
 			}
 
-			// ËÑË÷ÎÄ¼ş
+			// æœç´¢æ–‡ä»¶
 			std::string src_content_ = ostream_content_.str();
-			boost::regex src_regex_("src=\"([^\"]*?)\"");
-			boost::smatch src_smatch_;
-			// ËÑË÷Æ¥ÅäÄÚÈİ
-			while (boost::regex_search(src_content_, src_smatch_, src_regex_))
+			std::regex src_regex_("src=\"([^\"]*?)\"");
+			std::smatch src_smatch_;
+			// æœç´¢åŒ¹é…å†…å®¹
+			while (std::regex_search(src_content_, src_smatch_, src_regex_))
 			{
-				// ²¶»ñÂ·¾¶
+				// æ•è·è·¯å¾„
 				if (!src_smatch_.empty())
 				{
-					// »ñÈ¡ÎÄ¼şÂ·¾¶
+					// è·å–æ–‡ä»¶è·¯å¾„
 					std::string str_src_ = src_smatch_[1].str();
 
-					// ÏÂÔØÎÄ¼ş
+					// ä¸‹è½½æ–‡ä»¶
 					get_download(str_src_);
 				}
 
-				// ¼ÌĞøËÑË÷
+				// ç»§ç»­æœç´¢
 				src_content_ = src_smatch_.suffix();
 			}
 
 			return 0;
 		}
 
-		// ÏÂÔØÎÄ¼ş
+		// ä¸‹è½½æ–‡ä»¶
 		std::size_t get_download(const std::string & link)
 		{
-			// ²Ã¼ôÎÄ¼şÃû³Æ
+			// è£å‰ªæ–‡ä»¶åç§°
 			auto npos_ = link.rfind('/');
 			std::string str_file_;
 
 			if (std::string::npos != npos_)
 			{
-				// ¿½±´ÎÄ¼şÃû³Æ
-				str_file_ = std::move(std::string(link.begin() + npos_ + 1, link.end()));
+				// æ‹·è´æ–‡ä»¶åç§°
+				str_file_ = std::move(std::string("res/") + std::string(link.begin() + npos_ + 1, link.end()));
+				std::filesystem::create_directory("res");
 			}
 
-			// ¶ÁÈ¡ÄÚÈİ
+			// è¯»å–å†…å®¹
 			read_content(link);
 
-			// Ğ´ÈëÎÄ¼ş
+			// å†™å…¥æ–‡ä»¶
 			try
 			{
 				std::ofstream file_(str_file_, std::ios::out | std::ios_base::binary | std::ios::trunc);
 				if (file_.is_open())
 				{
-					// Ğ´ÈëÄÚÈİ
+					// å†™å…¥å†…å®¹
 					file_ << ostream_content_.str();
-					// ¹Ø±ÕÎÄ¼ş
+					// å…³é—­æ–‡ä»¶
 					file_.close();
 				}
 				else
@@ -128,56 +129,56 @@ namespace wcont
 
 	private:
 
-		// ¶ÁÈ¡Ò³ÃæÄÚÈİ
+		// è¯»å–é¡µé¢å†…å®¹
 		std::size_t read_content(const std::string & link)
 		{
 			try
 			{
-				// ÖØÖÃÒ³Ãæ
+				// é‡ç½®é¡µé¢
 				std::string str_base_;
 
-				// Èç¹ûÊÇ×ÓÒ³¼ÓÉÏ»ù´¡ÍøÖ·
+				// å¦‚æœæ˜¯å­é¡µåŠ ä¸ŠåŸºç¡€ç½‘å€
 				str_base_ = (std::string::npos == link.find(".com")) ? str_base_link_ + link : link;
 
-				// ÅĞ¶¨ÊÇhttp»¹ÊÇhttps
+				// åˆ¤å®šæ˜¯httpè¿˜æ˜¯https
 				std::size_t start_pos_ = std::string::npos != str_base_.find("http://") ? str_base_.find("http://") + strlen("http://")
 					: std::string::npos != str_base_.find("https://") ? str_base_.find("https://") + strlen("https://") : 0;
 				std::size_t end_pos_ = std::string::npos != str_base_.find(".com") ? str_base_.find(".com") + strlen(".com") : 0;
 
-				// »ñÈ¡ÍøÖ·
+				// è·å–ç½‘å€
 				std::string url(str_base_.begin() + start_pos_, str_base_.begin() + end_pos_);
-				// ²Ã¼ôÂ·¾¶
+				// è£å‰ªè·¯å¾„
 				std::string path(str_base_.begin() + end_pos_, str_base_.end());
 
-				// ´´½¨·şÎñ
-				boost::asio::io_service io_service_;
+				// åˆ›å»ºæœåŠ¡
+				asio::io_service io_service_;
 
-				// ´´½¨Ö¸Ïò·şÎñÆ÷µÄ½âÎöÆ÷
+				// åˆ›å»ºæŒ‡å‘æœåŠ¡å™¨çš„è§£æå™¨
 				tcp::resolver resolver_(io_service_);
 				tcp::resolver::query query_(url, "http");
 				tcp::resolver::iterator endpoint_iterator_ = resolver_.resolve(query_);
 
-				// °ó¶¨socket
+				// ç»‘å®šsocket
 				tcp::socket socket_(io_service_);
-				// ×èÈûÁ¬½ÓÖ®
-				boost::asio::connect(socket_, endpoint_iterator_);
+				// é˜»å¡è¿æ¥ä¹‹
+				asio::connect(socket_, endpoint_iterator_);
 
-				// ×¼±¸ÇëÇó
-				boost::asio::streambuf request_;
+				// å‡†å¤‡è¯·æ±‚
+				asio::streambuf request_;
 				std::ostream request_stream_(&request_);
 				request_stream_ << "GET " << path << " HTTP/1.0\r\n";
 				request_stream_ << "Host: " << url << "\r\n";
 				request_stream_ << "Accept: */*\r\n";
 				request_stream_ << "Connection: close\r\n\r\n";
 
-				// ¶ª³öÇëÇó
-				boost::asio::write(socket_, request_);
+				// ä¸¢å‡ºè¯·æ±‚
+				asio::write(socket_, request_);
 
-				// ¶ÁÈ¡·µ»ØµÄÍ·²¿ĞÅÏ¢
-				boost::asio::streambuf response_;
-				boost::asio::read_until(socket_, response_, "\r\n");
+				// è¯»å–è¿”å›çš„å¤´éƒ¨ä¿¡æ¯
+				asio::streambuf response_;
+				asio::read_until(socket_, response_, "\r\n");
 
-				// ¼ì²é·µ»Ø½á¹û
+				// æ£€æŸ¥è¿”å›ç»“æœ
 				std::istream response_stream_(&response_);
 				std::string http_version_;
 				response_stream_ >> http_version_;
@@ -190,46 +191,46 @@ namespace wcont
 					std::cout << "Invalid response\n";
 					return 1;
 				}
-				// ÊÇ·ñÓĞĞ§·µ»Ø
+				// æ˜¯å¦æœ‰æ•ˆè¿”å›
 				if (valid_http_ret_val != status_code_)
 				{
 					std::cout << "Response returned with status code " << status_code_ << "\n";
 					return 1;
 				}
 
-				// ¶ÁÈ¡½áÊøÍ·²¿
-				boost::asio::read_until(socket_, response_, "\r\n\r\n");
+				// è¯»å–ç»“æŸå¤´éƒ¨
+				asio::read_until(socket_, response_, "\r\n\r\n");
 
-				// Ìø¹ıÍ·²¿ĞÅÏ¢
+				// è·³è¿‡å¤´éƒ¨ä¿¡æ¯
 				std::string header_;
 				while (std::getline(response_stream_, header_) && "\r" != header_);
 
-				// ÄÚÈİ´æ´¢
+				// å†…å®¹å­˜å‚¨
 				std::ostringstream ostream_;
 
-				// Ğ´ÈëÄÚÈİ
+				// å†™å…¥å†…å®¹
 				if (0 < response_.size())
 					ostream_ << &response_;
 
-				// ¶ÁÈ¡ÕıÎÄ
-				boost::system::error_code error_;
-				while (boost::asio::read(socket_, response_,
-					boost::asio::transfer_at_least(1), error_))
+				// è¯»å–æ­£æ–‡
+				std::error_code error_;
+				while (asio::read(socket_, response_,
+					asio::transfer_at_least(1), error_))
 					ostream_ << &response_;
 
-				// Å×³ö´íÎó
-				if (error_ != boost::asio::error::eof)
-					throw boost::system::system_error(error_);
+				// æŠ›å‡ºé”™è¯¯
+				if (error_ != asio::error::eof)
+					throw std::error_code(error_);
 
-				// ´æ´¢½âÎöÄÚÈİ
+				// å­˜å‚¨è§£æå†…å®¹
 				ostream_content_ = std::move(ostream_);
 			}
-			// ²¶»ñ½ÓÊÕÒì³£
+			// æ•è·æ¥æ”¶å¼‚å¸¸
 			catch (const std::exception & e)
 			{
 				std::cout << "Exception: " << e.what() << "\n";
 			}
-			// ²¶»ñÆäËûÒì³£
+			// æ•è·å…¶ä»–å¼‚å¸¸
 			catch (const std::string & e)
 			{
 				std::cout << "Exception: " << e << "\n";
@@ -238,9 +239,9 @@ namespace wcont
 			return 0;
 		}
 
-		// ´æ´¢¶ÁÈ¡ÄÚÈİ
+		// å­˜å‚¨è¯»å–å†…å®¹
 		std::ostringstream ostream_content_;
-		// »ù×¼Ò³Ãæ
+		// åŸºå‡†é¡µé¢
 		std::string str_base_link_;
 	};
 }
